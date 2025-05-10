@@ -1,5 +1,8 @@
 version: '3.1'
 
+networks:
+  dify:
+
 services:
   api:
     image: langgenius/dify-api:latest
@@ -45,28 +48,22 @@ services:
       # 控制台设置，减少API调用
       - CONSOLE_URL=http://localhost
       - CONSOLE_API_URL=http://localhost:5001
-      # 关闭模型验证（但启用插件功能）
+      # 关闭模型验证（启用插件功能）
       - DISABLE_PROVIDER_MODEL_VALIDATION=true
-      - PLUGIN_EXECUTOR_PUBLIC_URL=http://sandbox:5002
-      # 其他可选功能限制
-      - DISABLE_WORKFLOW=true
-      - DISABLE_MULTIMODAL=true
-      - DISABLE_WEB_APP=true
-      - DISABLE_SSO=true
-      - DISABLE_MODERATION=true
-      - DISABLE_RERANK=true
-      - DISABLE_RERANK_MODELS=true
+      # 正确的插件配置
+      - SANDBOX_PUBLIC_URL=http://sandbox:8194
     volumes:
       - ./volumes/api/storage:/app/api/storage
     depends_on:
       - db
       - redis
       - sandbox
+    networks:
+      - dify
     ports:
       - "5001:5001"
     extra_hosts:
       - "host.docker.internal:host-gateway"
-      - "127.0.0.1:host-gateway"
 
   web:
     image: langgenius/dify-web:latest
@@ -79,19 +76,19 @@ services:
       - "80:3000"
     depends_on:
       - api
+    networks:
+      - dify
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # 添加插件执行器服务（sandbox）
+  # 修改插件执行器服务配置
   sandbox:
     image: langgenius/dify-sandbox:0.2.1
     restart: always
-    environment:
-      - PORT=5002
-      - LOG_LEVEL=INFO
-      - SECRET_KEY=sk-change-me-to-a-random-key
+    networks:
+      - dify
     ports:
-      - "5002:5002"
+      - "8194:8194"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -104,6 +101,8 @@ services:
       - POSTGRES_DB=dify
     volumes:
       - ./volumes/db:/var/lib/postgresql/data
+    networks:
+      - dify
     ports:
       - "5432:5432"
 
@@ -115,5 +114,7 @@ services:
     volumes:
       - ./volumes/redis:/data
     command: redis-server --requirepass difyai123456
+    networks:
+      - dify
     ports:
       - "6379:6379" 
