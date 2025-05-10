@@ -1,0 +1,18 @@
+# Docker数据卷
+volumes/
+
+# 临时文件
+*.tmp
+*.log
+
+# IDE配置
+.idea/
+.vscode/
+
+# 环境配置
+.env
+.env.local
+
+# 系统文件
+.DS_Store
+Thumbs.db 

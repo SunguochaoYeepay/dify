@@ -1,0 +1,109 @@
+version: '3.1'
+
+services:
+  api:
+    image: langgenius/dify-api:latest
+    restart: always
+    environment:
+      # 核心数据库配置
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=difyai123456
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=dify
+      # Redis配置
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_USERNAME=default
+      - REDIS_PASSWORD=difyai123456
+      # 网络配置
+      - WEB_API_URL=http://localhost:5001
+      - WEB_APP_URL=http://localhost
+      - CONSOLE_URL=http://localhost
+      - CONSOLE_API_URL=http://localhost:5001
+      # CORS配置 
+      - CONSOLE_CORS_ALLOW_ORIGINS=http://localhost,http://127.0.0.1
+      - APP_CORS_ALLOW_ORIGINS=http://localhost,http://127.0.0.1
+      # 安全配置
+      - SECRET_KEY=change-me-to-a-random-key
+      # 初始账户
+      - INIT_ROOT_EMAIL=admin@example.com
+      - INIT_ROOT_PASSWORD=password
+      # 存储配置
+      - STORAGE_TYPE=local
+      - STORAGE_LOCAL_PATH=/app/api/storage
+      # 向量数据库
+      - VECTOR_STORE=chromadb
+      - CHROMADB_PERSISTENCE_PATH=/app/api/storage/chromadb
+      - MIGRATION_ENABLED=true
+      
+      # ====== 关键配置 ======
+      # 模拟API Key（解决初始化验证问题）
+      - OPENAI_API_KEY=sk-1234567890
+      - ANTHROPIC_API_KEY=sk-1234567890
+      
+      # Ollama配置（本地模型）
+      - OLLAMA_API_BASE_URL=http://host.docker.internal:11434
+      - AUTO_SETUP_LOCAL_PROVIDER=true
+      - LOCAL_MODEL_API_TYPE=ollama
+      
+      # 完全禁用所有可能导致问题的功能
+      - DISABLE_PROVIDER_MODEL_VALIDATION=true
+      - DISABLE_PLUGIN=true
+      - DISABLE_WORKFLOW=true
+      - DISABLE_MULTIMODAL=true
+      - DISABLE_WEB_APP=true
+      - DISABLE_SSO=true
+      - DISABLE_MODERATION=true
+      - DISABLE_RERANK=true
+      - DISABLE_RERANK_MODELS=true
+      - DISABLE_TEXT_EMBEDDING_MODELS=true
+      - DISABLE_TEXT_GENERATION_MODELS=true
+      - DISABLE_RETRIEVAL=true
+      
+    volumes:
+      - ./volumes/api/storage:/app/api/storage
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "5001:5001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "127.0.0.1:host-gateway"
+
+  web:
+    image: langgenius/dify-web:latest
+    restart: always
+    environment:
+      - CONSOLE_API_URL=http://localhost:5001
+      - APP_API_URL=http://localhost:5001
+    ports:
+      - "80:3000"
+    depends_on:
+      - api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  db:
+    image: postgres:14
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=difyai123456
+      - POSTGRES_DB=dify
+    volumes:
+      - ./volumes/db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:6
+    restart: always
+    environment:
+      - REDIS_PASSWORD=difyai123456
+    volumes:
+      - ./volumes/redis:/data
+    command: redis-server --requirepass difyai123456
+    ports:
+      - "6379:6379" 

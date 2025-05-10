@@ -1,0 +1,119 @@
+version: '3.1'
+
+services:
+  api:
+    image: langgenius/dify-api:latest
+    restart: always
+    environment:
+      # Database configuration
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=difyai123456
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=dify
+      # Redis configuration
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_USERNAME=default
+      - REDIS_PASSWORD=difyai123456
+      # Web service configuration
+      - WEB_API_URL=http://localhost:5001
+      - WEB_APP_URL=http://localhost
+      # CORS settings with explicit full list
+      - CONSOLE_CORS_ALLOW_ORIGINS=http://localhost,http://127.0.0.1,http://localhost:3000,http://localhost:80
+      - APP_CORS_ALLOW_ORIGINS=http://localhost,http://127.0.0.1,http://localhost:3000,http://localhost:80
+      # Security configuration
+      - SECRET_KEY=sk-change-me-to-a-random-key
+      # Initial admin account
+      - INIT_ROOT_EMAIL=admin@example.com
+      - INIT_ROOT_PASSWORD=password
+      # File storage configuration
+      - STORAGE_TYPE=local
+      - STORAGE_LOCAL_PATH=/app/api/storage
+      # Vector database configuration
+      - VECTOR_STORE=chromadb
+      - CHROMADB_PERSISTENCE_PATH=/app/api/storage/chromadb
+      # Enable database migration on startup
+      - MIGRATION_ENABLED=true
+      # 最简化参数，模拟安装了API Key（重要参数！）
+      - OPENAI_API_KEY=sk-1234567890
+      - ANTHROPIC_API_KEY=sk-1234567890
+      # Ollama配置（本地模型配置）
+      - OLLAMA_API_BASE_URL=http://host.docker.internal:11434
+      - AUTO_SETUP_LOCAL_PROVIDER=true
+      - LOCAL_MODEL_API_TYPE=ollama
+      # 控制台设置，减少API调用
+      - CONSOLE_URL=http://localhost
+      - CONSOLE_API_URL=http://localhost:5001
+      # 关闭模型验证（但启用插件功能）
+      - DISABLE_PROVIDER_MODEL_VALIDATION=true
+      - PLUGIN_EXECUTOR_PUBLIC_URL=http://sandbox:5002
+      # 其他可选功能限制
+      - DISABLE_WORKFLOW=true
+      - DISABLE_MULTIMODAL=true
+      - DISABLE_WEB_APP=true
+      - DISABLE_SSO=true
+      - DISABLE_MODERATION=true
+      - DISABLE_RERANK=true
+      - DISABLE_RERANK_MODELS=true
+    volumes:
+      - ./volumes/api/storage:/app/api/storage
+    depends_on:
+      - db
+      - redis
+      - sandbox
+    ports:
+      - "5001:5001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "127.0.0.1:host-gateway"
+
+  web:
+    image: langgenius/dify-web:latest
+    restart: always
+    environment:
+      # Important: Using browser-relative API URLs to avoid CORS issues
+      - CONSOLE_API_URL=http://localhost:5001
+      - APP_API_URL=http://localhost:5001
+    ports:
+      - "80:3000"
+    depends_on:
+      - api
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # 添加插件执行器服务（sandbox）
+  sandbox:
+    image: langgenius/dify-sandbox:0.2.1
+    restart: always
+    environment:
+      - PORT=5002
+      - LOG_LEVEL=INFO
+      - SECRET_KEY=sk-change-me-to-a-random-key
+    ports:
+      - "5002:5002"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  db:
+    image: postgres:14
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=difyai123456
+      - POSTGRES_DB=dify
+    volumes:
+      - ./volumes/db:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:6
+    restart: always
+    environment:
+      - REDIS_PASSWORD=difyai123456
+    volumes:
+      - ./volumes/redis:/data
+    command: redis-server --requirepass difyai123456
+    ports:
+      - "6379:6379" 

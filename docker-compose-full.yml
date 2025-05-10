@@ -1,0 +1,231 @@
+version: '3.1'
+
+networks:
+  dify-network:
+  ssrf_proxy_network:
+
+services:
+  api:
+    image: langgenius/dify-api:latest
+    restart: always
+    environment:
+      # 数据库配置
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=difyai123456
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=dify
+      # Redis配置
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_USERNAME=default
+      - REDIS_PASSWORD=difyai123456
+      # 网络配置
+      - CONSOLE_WEB_URL=http://localhost
+      - CONSOLE_API_URL=http://localhost:5001
+      - SERVICE_API_URL=http://localhost:5001
+      - APP_WEB_URL=http://localhost
+      - APP_API_URL=http://localhost:5001
+      # CORS配置
+      - CONSOLE_CORS_ALLOW_ORIGINS=http://localhost,http://127.0.0.1
+      - APP_CORS_ALLOW_ORIGINS=http://localhost,http://127.0.0.1
+      # 安全配置
+      - SECRET_KEY=sk-change-me-to-a-random-key
+      # 初始账户
+      - INIT_ROOT_EMAIL=admin@example.com
+      - INIT_ROOT_PASSWORD=password
+      # 文件存储配置
+      - STORAGE_TYPE=local
+      - STORAGE_LOCAL_PATH=/app/api/storage
+      # 向量数据库配置
+      - VECTOR_STORE=weaviate
+      - WEAVIATE_ENDPOINT=http://weaviate:8080
+      - WEAVIATE_AUTH_API_KEY=your-weaviate-api-key
+      # 启用数据库迁移
+      - MIGRATION_ENABLED=true
+      # 模型配置（本地Ollama和模拟API密钥）
+      - OPENAI_API_KEY=sk-1234567890
+      - ANTHROPIC_API_KEY=sk-1234567890
+      - OLLAMA_API_BASE_URL=http://host.docker.internal:11434
+      - AUTO_SETUP_LOCAL_PROVIDER=true
+      - LOCAL_MODEL_API_TYPE=ollama
+      # 插件配置
+      - DISABLE_PROVIDER_MODEL_VALIDATION=true
+      - PLUGIN_EXECUTOR_PUBLIC_URL=http://sandbox:5002
+      # SSRF代理配置
+      - HTTP_PROXY=http://ssrf_proxy:3128
+      - HTTPS_PROXY=http://ssrf_proxy:3128
+      # 其他配置
+      - MODE=prod
+      # 可选功能控制
+      - DISABLE_WORKFLOW=false
+      - DISABLE_MULTIMODAL=false
+      - DISABLE_WEB_APP=false
+      - DISABLE_SSO=false
+    volumes:
+      - ./volumes/api/storage:/app/api/storage
+    depends_on:
+      - db
+      - redis
+      - sandbox
+      - weaviate
+    networks:
+      - dify-network
+      - ssrf_proxy_network
+    ports:
+      - "5001:5001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  worker:
+    image: langgenius/dify-api:latest
+    restart: always
+    entrypoint: ["./entrypoint-worker.sh"]
+    environment:
+      # 数据库配置
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=difyai123456
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=dify
+      # Redis配置
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_USERNAME=default
+      - REDIS_PASSWORD=difyai123456
+      # Celery配置
+      - CELERY_BROKER_URL=redis://:difyai123456@redis:6379/1
+      # 安全配置
+      - SECRET_KEY=sk-change-me-to-a-random-key
+      # 文件存储配置
+      - STORAGE_TYPE=local
+      - STORAGE_LOCAL_PATH=/app/api/storage
+      # 向量数据库配置
+      - VECTOR_STORE=weaviate
+      - WEAVIATE_ENDPOINT=http://weaviate:8080
+      - WEAVIATE_AUTH_API_KEY=your-weaviate-api-key
+      # 模型配置
+      - OPENAI_API_KEY=sk-1234567890
+      - ANTHROPIC_API_KEY=sk-1234567890
+      - OLLAMA_API_BASE_URL=http://host.docker.internal:11434
+      - AUTO_SETUP_LOCAL_PROVIDER=true
+      - LOCAL_MODEL_API_TYPE=ollama
+      # 插件配置
+      - PLUGIN_EXECUTOR_PUBLIC_URL=http://sandbox:5002
+      - DISABLE_PROVIDER_MODEL_VALIDATION=true
+      # SSRF代理配置
+      - HTTP_PROXY=http://ssrf_proxy:3128
+      - HTTPS_PROXY=http://ssrf_proxy:3128
+      # 其他配置
+      - MODE=prod
+    volumes:
+      - ./volumes/api/storage:/app/api/storage
+    depends_on:
+      - db
+      - redis
+      - sandbox
+      - weaviate
+    networks:
+      - dify-network
+      - ssrf_proxy_network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  web:
+    image: langgenius/dify-web:latest
+    restart: always
+    environment:
+      - CONSOLE_API_URL=http://localhost:5001
+      - APP_API_URL=http://localhost:5001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - dify-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  sandbox:
+    image: langgenius/dify-sandbox:0.2.1
+    restart: always
+    environment:
+      - PORT=5002
+      - LOG_LEVEL=INFO
+      - SECRET_KEY=sk-change-me-to-a-random-key
+    networks:
+      - dify-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  nginx:
+    image: nginx:latest
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - web
+      - api
+    networks:
+      - dify-network
+
+  weaviate:
+    image: semitechnologies/weaviate:1.19.0
+    restart: always
+    environment:
+      - QUERY_DEFAULTS_LIMIT=25
+      - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
+      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
+      - DEFAULT_VECTORIZER_MODULE=none
+      - CLUSTER_HOSTNAME=dify-weaviate
+    volumes:
+      - ./volumes/weaviate:/var/lib/weaviate
+    networks:
+      - dify-network
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=difyai123456
+      - POSTGRES_DB=dify
+    volumes:
+      - ./volumes/db:/var/lib/postgresql/data
+    networks:
+      - dify-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6-alpine
+    restart: always
+    command: redis-server --requirepass difyai123456
+    environment:
+      - REDIS_PASSWORD=difyai123456
+    volumes:
+      - ./volumes/redis:/data
+    networks:
+      - dify-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ssrf_proxy:
+    image: ubuntu/squid:latest
+    restart: always
+    volumes:
+      - ./squid/squid.conf:/etc/squid/squid.conf:ro
+    networks:
+      ssrf_proxy_network:
+        aliases:
+          - ssrf_proxy 
